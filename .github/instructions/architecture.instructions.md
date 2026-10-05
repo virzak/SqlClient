@@ -93,7 +93,7 @@ The unified project uses conditional `ItemGroup` elements for dependencies:
 
 - **net462**: References `System.Configuration`, `System.EnterpriseServices`, `System.Transactions`, plus `Microsoft.Data.SqlClient.SNI` native package
 - **net8.0/net9.0**: References `Microsoft.Data.SqlClient.SNI.runtime`, `System.Configuration.ConfigurationManager`, `Microsoft.SqlServer.Server`
-- **Shared**: `Azure.Core`, `Azure.Identity`, `Microsoft.Bcl.Cryptography`, `Microsoft.Extensions.Caching.Memory`, `Microsoft.IdentityModel.*`, `System.Security.Cryptography.Pkcs`
+- **Shared**: `Azure.Core`, `Azure.Identity`, `Microsoft.Bcl.Cryptography`, `Microsoft.Extensions.Caching.Memory`, `System.Security.Cryptography.Pkcs`
 
 ### Reference Assemblies
 The `ref/` directories define the public API surface:

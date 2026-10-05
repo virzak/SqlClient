@@ -13,6 +13,7 @@ This package provides **Azure integration extensions** for [Microsoft.Data.SqlCl
 - **Managed Identity Support**: Connect to Azure SQL using Azure Managed Identities
 - **Token Caching**: Automatic caching of authentication tokens for improved performance
 - **Azure.Identity Integration**: Leverage the full power of Azure.Identity credential providers
+- **Azure Attestation**: Validates Microsoft Azure Attestation tokens for Always Encrypted with secure enclaves. Applications that connect with `Attestation Protocol=AAS` must reference this package.
 
 ## Supportability
 
