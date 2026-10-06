@@ -90,16 +90,13 @@ namespace Microsoft.Data.SqlClient
                         return payload?.ToArray();
                     }
                 }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    // Cancellation is not an attestation failure; surface it to the caller unchanged.
+                    throw;
+                }
                 catch (Exception e)
                 {
-#if !SYNC_ONLY
-                    // Cancellation is not an attestation failure; surface it to the caller unchanged.
-                    if (e is OperationCanceledException && cancellationToken.IsCancellationRequested)
-                    {
-                        throw;
-                    }
-#endif
-
                     exception = e;
                 }
             }
@@ -115,18 +112,6 @@ namespace Microsoft.Data.SqlClient
 #else
             return s_client.GetStreamAsync(url);
 #endif
-        }
-
-        // Deserializes the signing certificates payload.
-        private static ValueTask<List<byte>> ReadPayloadAsync(Stream stream, CancellationToken cancellationToken)
-        {
-            return JsonSerializer.DeserializeAsync(stream, SqlClientJsonSerializerContext.Default.ListByte, cancellationToken);
-        }
-
-        // Synchronous counterpart of ReadPayloadAsync, which the generated MakeRequest calls.
-        private static List<byte> ReadPayload(Stream stream)
-        {
-            return JsonSerializer.Deserialize(stream, SqlClientJsonSerializerContext.Default.ListByte);
         }
 
         // Synchronous counterpart of GetStreamAsync, which the generated MakeRequest calls.
