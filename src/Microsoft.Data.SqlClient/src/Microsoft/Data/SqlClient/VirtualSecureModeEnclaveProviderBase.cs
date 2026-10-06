@@ -14,7 +14,7 @@ using Microsoft.Extensions.Caching.Memory;
 
 namespace Microsoft.Data.SqlClient
 {
-    internal abstract class VirtualizationBasedSecurityEnclaveProviderBase : EnclaveProviderBase
+    internal abstract partial class VirtualizationBasedSecurityEnclaveProviderBase : EnclaveProviderBase
     {
         #region Members
 
@@ -261,45 +261,12 @@ namespace Microsoft.Data.SqlClient
             }
         }
 
-        // Performs Attestation per the protocol used by Virtual Secure Modules.
-        private void VerifyAttestationInfo(string attestationUrl, HealthReport healthReport, EnclaveReportPackage enclaveReportPackage)
-        {
-            bool shouldRetryValidation;
-            bool shouldForceUpdateSigningKeys = false;
-            do
-            {
-                shouldRetryValidation = false;
-
-                // Get HGS Root signing certs from HGS
-                X509Certificate2Collection signingCerts = GetSigningCertificate(attestationUrl, shouldForceUpdateSigningKeys);
-
-                // Verify SQL Health report root chain of trust is the HGS root signing cert
-                if (!VerifyHealthReportAgainstRootCertificate(signingCerts, healthReport.Certificate, out X509ChainStatusFlags chainStatus) ||
-                    chainStatus != X509ChainStatusFlags.NoError)
-                {
-                    // In cases if we fail to validate the health report, it might be possible that we are using old signing keys
-                    // let's re-download the signing keys again and re-validate the health report
-                    if (!shouldForceUpdateSigningKeys)
-                    {
-                        shouldForceUpdateSigningKeys = true;
-                        shouldRetryValidation = true;
-                    }
-                    else
-                    {
-                        throw SQL.AttestationFailed(string.Format(Strings.VerifyHealthCertificateChainFormat, attestationUrl, chainStatus));
-                    }
-                }
-            } while (shouldRetryValidation);
-
-            // Verify enclave report is signed by IDK_S from health report
-            VerifyEnclaveReportSignature(enclaveReportPackage, healthReport.Certificate);
-        }
-
         // Makes a web request to the provided url and returns the response as a byte[]
         protected abstract byte[] MakeRequest(string url);
 
         // Performs Attestation per the protocol used by Virtual Secure Modules.
-        // Asynchronous counterpart of VerifyAttestationInfo.
+        // The synchronous VerifyAttestationInfo is generated from this method.
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         private async Task VerifyAttestationInfoAsync(string attestationUrl, HealthReport healthReport, EnclaveReportPackage enclaveReportPackage, CancellationToken cancellationToken)
         {
             bool shouldRetryValidation;
@@ -335,7 +302,12 @@ namespace Microsoft.Data.SqlClient
         }
 
         // Gets the root signing certificate for the provided attestation service.
-        // Asynchronous counterpart of GetSigningCertificate.
+        // If the certificate does not exist in the cache, this will make a call to the
+        // attestation service's "/signingCertificates" endpoint. This endpoint can
+        // return multiple certificates if the attestation service consists
+        // of multiple nodes.
+        // The synchronous GetSigningCertificate is generated from this method.
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         private async Task<X509Certificate2Collection> GetSigningCertificateAsync(string attestationUrl, bool forceUpdate, CancellationToken cancellationToken)
         {
             attestationUrl = GetAttestationUrl(attestationUrl);
@@ -369,38 +341,6 @@ namespace Microsoft.Data.SqlClient
         // Implementations should honour the cancellation token as closely as their target framework
         // allows, and document any framework specific limits.
         protected abstract Task<byte[]> MakeRequestAsync(string url, CancellationToken cancellationToken);
-
-        // Gets the root signing certificate for the provided attestation service.
-        // If the certificate does not exist in the cache, this will make a call to the
-        // attestation service's "/signingCertificates" endpoint. This endpoint can
-        // return multiple certificates if the attestation service consists
-        // of multiple nodes.
-        private X509Certificate2Collection GetSigningCertificate(string attestationUrl, bool forceUpdate)
-        {
-            attestationUrl = GetAttestationUrl(attestationUrl);
-            X509Certificate2Collection signingCertificates = rootSigningCertificateCache.Get<X509Certificate2Collection>(attestationUrl);
-            if (forceUpdate || signingCertificates == null || AnyCertificatesExpired(signingCertificates))
-            {
-                byte[] data = MakeRequest(attestationUrl);
-                var certificateCollection = new X509Certificate2Collection();
-
-                try
-                {
-                    SignedCms s = new SignedCms();
-                    s.Decode(data);
-                    certificateCollection.AddRange(s.Certificates);
-                }
-                catch (CryptographicException exception)
-                {
-                    throw SQL.AttestationFailed(string.Format(Strings.GetAttestationSigningCertificateFailedInvalidCertificate, attestationUrl), exception);
-                }
-
-                rootSigningCertificateCache.Set<X509Certificate2Collection>(attestationUrl, certificateCollection,
-                    absoluteExpirationRelativeToNow: s_rootSigningCertificateCacheTimeout);
-            }
-
-            return rootSigningCertificateCache.Get<X509Certificate2Collection>(attestationUrl);
-        }
 
         // Return the endpoint for given attestation url
         protected abstract string GetAttestationUrl(string attestationUrl);

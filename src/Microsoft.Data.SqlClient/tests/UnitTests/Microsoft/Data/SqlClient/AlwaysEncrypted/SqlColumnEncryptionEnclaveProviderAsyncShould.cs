@@ -436,6 +436,22 @@ namespace Microsoft.Data.SqlClient.UnitTests.AlwaysEncrypted
             Assert.NotNull(exception.InnerException);
         }
 
+        /// <summary>
+        /// Verifies that the synchronous HGS request, which is generated from the async one, also
+        /// surfaces a failed request as an attestation failure. Guards the sync/async parity the
+        /// generator is meant to provide.
+        /// </summary>
+        [Fact]
+        public void HgsMakeRequest_WhenRequestFails_ThrowsAttestationFailure()
+        {
+            TestHostGuardianServiceEnclaveProvider provider = new TestHostGuardianServiceEnclaveProvider { MaxNumRetries = 0 };
+
+            SqlException exception = Assert.Throws<SqlException>(
+                () => provider.InvokeMakeRequest("http://localhost:1/signingCertificates"));
+
+            Assert.NotNull(exception.InnerException);
+        }
+
         #endregion
 
         #region Helpers
@@ -762,6 +778,9 @@ namespace Microsoft.Data.SqlClient.UnitTests.AlwaysEncrypted
         {
             internal Task<byte[]> InvokeMakeRequestAsync(string url, CancellationToken cancellationToken)
                 => MakeRequestAsync(url, cancellationToken);
+
+            internal byte[] InvokeMakeRequest(string url)
+                => MakeRequest(url);
         }
 
         #endregion

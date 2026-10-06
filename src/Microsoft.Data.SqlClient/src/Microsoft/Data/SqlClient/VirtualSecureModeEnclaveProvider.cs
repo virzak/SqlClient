@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 namespace Microsoft.Data.SqlClient
 {
     // Implementation of an Enclave provider for Windows Virtual Secure Mode enclaves
-    internal class HostGuardianServiceEnclaveProvider : VirtualizationBasedSecurityEnclaveProviderBase
+    internal partial class HostGuardianServiceEnclaveProvider : VirtualizationBasedSecurityEnclaveProviderBase
     {
         #region Members
 
@@ -57,43 +57,15 @@ namespace Microsoft.Data.SqlClient
             return attestationUrl.TrimEnd('/') + AttestationUrlSuffix;
         }
 
-        // Makes a web request to the provided url and returns the response as a byte[]
-        protected override byte[] MakeRequest(string url)
-        {
-            Exception exception = null;
-
-            for (int n = 0; n < MaxNumRetries + 1 /* Initial attempt + numRetries */; n++)
-            {
-                try
-                {
-                    if (n != 0)
-                    {
-                        Thread.Sleep(EnclaveRetrySleepInSeconds * 1000);
-                    }
-
-                    using (Stream stream = s_client.GetStreamAsync(url).ConfigureAwait(false).GetAwaiter().GetResult())
-                    {
-                        return JsonSerializer.Deserialize(stream, SqlClientJsonSerializerContext.Default.ListByte)?.ToArray();
-                    }
-                }
-                catch (Exception e)
-                {
-                    exception = e;
-                }
-            }
-
-            throw SQL.AttestationFailed(string.Format(Strings.GetAttestationSigningCertificateRequestFailedFormat, url, exception.Message), exception);
-        }
-
         // Makes a web request to the provided url and returns the response as a byte[].
-        // Asynchronous counterpart of MakeRequest: the HTTP round trip, the retry backoff and the
-        // JSON deserialization are all awaited rather than blocked on.
+        // The synchronous MakeRequest is generated from this method.
         //
         // Cancellation granularity differs by target framework. On .NET the token is passed to
         // HttpClient, so an in-flight request is cancelled promptly. On .NET Framework there is no
         // token-accepting GetStreamAsync overload, so an in-flight request runs to completion and
         // cancellation is only observed between attempts. Callers must not assume uniform
         // cancellation latency across target frameworks.
+        [Zomp.SyncMethodGenerator.CreateSyncVersion]
         protected override async Task<byte[]> MakeRequestAsync(string url, CancellationToken cancellationToken)
         {
             Exception exception = null;
@@ -109,11 +81,7 @@ namespace Microsoft.Data.SqlClient
                         await Task.Delay(EnclaveRetrySleepInSeconds * 1000, cancellationToken).ConfigureAwait(false);
                     }
 
-#if NET
-                    using (Stream stream = await s_client.GetStreamAsync(url, cancellationToken).ConfigureAwait(false))
-#else
-                    using (Stream stream = await s_client.GetStreamAsync(url).ConfigureAwait(false))
-#endif
+                    using (Stream stream = await GetStreamAsync(url, cancellationToken).ConfigureAwait(false))
                     {
                         List<byte> payload = await JsonSerializer
                             .DeserializeAsync(stream, SqlClientJsonSerializerContext.Default.ListByte, cancellationToken)
@@ -122,18 +90,50 @@ namespace Microsoft.Data.SqlClient
                         return payload?.ToArray();
                     }
                 }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    // Cancellation is not an attestation failure; surface it to the caller unchanged.
-                    throw;
-                }
                 catch (Exception e)
                 {
+#if !SYNC_ONLY
+                    // Cancellation is not an attestation failure; surface it to the caller unchanged.
+                    if (e is OperationCanceledException && cancellationToken.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+#endif
+
                     exception = e;
                 }
             }
 
             throw SQL.AttestationFailed(string.Format(Strings.GetAttestationSigningCertificateRequestFailedFormat, url, exception.Message), exception);
+        }
+
+        // Starts the request for the response stream.
+        private static Task<Stream> GetStreamAsync(string url, CancellationToken cancellationToken)
+        {
+#if NET
+            return s_client.GetStreamAsync(url, cancellationToken);
+#else
+            return s_client.GetStreamAsync(url);
+#endif
+        }
+
+        // Deserializes the signing certificates payload.
+        private static ValueTask<List<byte>> ReadPayloadAsync(Stream stream, CancellationToken cancellationToken)
+        {
+            return JsonSerializer.DeserializeAsync(stream, SqlClientJsonSerializerContext.Default.ListByte, cancellationToken);
+        }
+
+        // Synchronous counterpart of ReadPayloadAsync, which the generated MakeRequest calls.
+        private static List<byte> ReadPayload(Stream stream)
+        {
+            return JsonSerializer.Deserialize(stream, SqlClientJsonSerializerContext.Default.ListByte);
+        }
+
+        // Synchronous counterpart of GetStreamAsync, which the generated MakeRequest calls.
+        // HttpClient has no synchronous GetStream, so this blocks on the asynchronous request.
+        private static Stream GetStream(string url)
+        {
+            return s_client.GetStreamAsync(url).ConfigureAwait(false).GetAwaiter().GetResult();
         }
 
         #endregion
