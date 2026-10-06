@@ -261,6 +261,11 @@
                       Condition="'$(ReferenceType)' == 'Package'" />
   </ItemGroup>
 
+  <!-- Build-time source generators (not a runtime or package dependency) -->
+  <ItemGroup>
+    <PackageReference Include="Zomp.SyncMethodGenerator" PrivateAssets="all" />
+  </ItemGroup>
+
   <!-- References for netframework -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net462'">
     <Reference Include="System.Configuration" />

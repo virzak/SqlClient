@@ -161,6 +161,8 @@
     <PackageVersion Include="System.Text.Json" Version="10.0.12" />
     <PackageVersion Include="System.ValueTuple" Version="4.6.2" />
     <PackageVersion Include="System.Threading.Channels" Version="10.0.12" />
+    <!-- Build-time source generator; generates sync methods from async ones. No runtime dependency. -->
+    <PackageVersion Include="Zomp.SyncMethodGenerator" Version="2.0.56" />
   </ItemGroup>
 
   <ItemGroup>
