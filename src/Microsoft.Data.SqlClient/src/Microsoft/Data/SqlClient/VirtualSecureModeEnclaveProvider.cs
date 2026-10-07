@@ -115,10 +115,29 @@ namespace Microsoft.Data.SqlClient
         }
 
         // Synchronous counterpart of GetStreamAsync, which the generated MakeRequest calls.
-        // HttpClient has no synchronous GetStream, so this blocks on the asynchronous request.
+        // HttpClient has no synchronous GetStream. On .NET, the synchronous Send API makes the
+        // request without blocking on asynchronous I/O; .NET Framework has no such API, so there
+        // this blocks on the asynchronous request.
         private static Stream GetStream(string url)
         {
+#if NET
+            using (HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Get, url))
+            {
+                HttpResponseMessage response = s_client.Send(request, HttpCompletionOption.ResponseHeadersRead);
+                try
+                {
+                    response.EnsureSuccessStatusCode();
+                    return response.Content.ReadAsStream();
+                }
+                catch
+                {
+                    response.Dispose();
+                    throw;
+                }
+            }
+#else
             return s_client.GetStreamAsync(url).ConfigureAwait(false).GetAwaiter().GetResult();
+#endif
         }
 
         #endregion
